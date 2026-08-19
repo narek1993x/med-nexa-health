@@ -36,9 +36,6 @@ const app = Fastify({
   },
 })
 
-// Strip API Gateway stage prefix for HTTP API v2
-app.register(stripStagePrefix)
-
 app.setErrorHandler(
   async (error: { message?: string; code?: string; statusCode?: number }, _request, reply) => {
     app.log.error(
@@ -65,6 +62,7 @@ app.setErrorHandler(
 // ---------------------------------------------------------------------------
 
 const appReady = app
+  .register(stripStagePrefix)
   .register(async (instance) => {
     await registerRoutes(instance, registry, fxTable)
   })
