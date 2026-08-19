@@ -3,8 +3,7 @@
  *
  * Every mock provider follows the same pattern:
  *   import { createMockHandler } from './factory'
- *   import { PROVIDER_OFFERS } from './data/provider'
- *   export const handler = createMockHandler(PROVIDER_OFFERS)
+ *   export const handler = createMockHandler(offers, '/provider/<id>/offers')
  *
  * Adding a new provider mock = ~5 lines + one SAM function entry.
  * The ranking service never changes.
@@ -12,21 +11,19 @@
 
 import awsLambdaFastify from '@fastify/aws-lambda'
 import Fastify from 'fastify'
+import type { APIGatewayProxyEventV2, Context } from 'aws-lambda'
 import type { Offer } from '../ranking/types'
-import stripStagePrefix from '../plugins/stripStagePrefix'
+import { stripStageFromEvent } from '../plugins/stripStagePrefix'
 
 export function createMockHandler(
   offers: Offer[],
   routePath = '/offers',
-): ReturnType<typeof awsLambdaFastify> {
+): (event: APIGatewayProxyEventV2, context: Context) => Promise<unknown> {
   const app = Fastify({
     logger: {
       level: process.env['LOG_LEVEL'] ?? 'info',
     },
   })
-
-  // Strip API Gateway stage prefix for HTTP API v2
-  app.register(stripStagePrefix)
 
   // GET <routePath> — returns the static offer list for this provider
   app.get(routePath, async (_request, reply) => {
@@ -38,5 +35,10 @@ export function createMockHandler(
     await reply.code(200).send({ status: 'ok' })
   })
 
-  return awsLambdaFastify(app)
+  const proxy = awsLambdaFastify(app)
+
+  return async (event: APIGatewayProxyEventV2, context: Context) => {
+    await app.ready()
+    return proxy(stripStageFromEvent(event), context)
+  }
 }

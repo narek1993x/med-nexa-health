@@ -16,7 +16,7 @@ import type { APIGatewayProxyEventV2, Context } from 'aws-lambda'
 import { loadProviderRegistry } from './service/registry'
 import { loadFxTable } from './service/fx'
 import { registerRoutes } from './router'
-import stripStagePrefix from '../plugins/stripStagePrefix'
+import { stripStageFromEvent } from '../plugins/stripStagePrefix'
 
 // ---------------------------------------------------------------------------
 // Cold-start initialisation — runs once per Lambda container lifetime
@@ -62,7 +62,6 @@ app.setErrorHandler(
 // ---------------------------------------------------------------------------
 
 const appReady = app
-  .register(stripStagePrefix)
   .register(async (instance) => {
     await registerRoutes(instance, registry, fxTable)
   })
@@ -76,5 +75,5 @@ const proxy = awsLambdaFastify(app)
 
 export async function handler(event: APIGatewayProxyEventV2, context: Context): Promise<unknown> {
   await appReady
-  return proxy(event, context)
+  return proxy(stripStageFromEvent(event), context)
 }

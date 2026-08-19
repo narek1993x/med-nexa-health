@@ -1,37 +1,44 @@
 /**
- * Fastify plugin — strips the API Gateway stage prefix from the request URL.
+ * Stage prefix stripping for AWS HTTP API (v2).
  *
- * AWS HTTP API (v2) includes the stage name in rawPath:
+ * API Gateway HTTP API includes the stage name in rawPath:
  *   /dev/best-care-options → /best-care-options
  *
- * @fastify/aws-lambda's retainStage logic only handles REST API (v1) events,
- * so we strip it ourselves via an onRequest hook.
+ * @fastify/aws-lambda's retainStage logic only handles REST API (v1) events.
+ * onRequest hooks are also too late — Fastify's router has already matched
+ * (or failed to match) the path by then.
+ *
+ * The correct fix is to mutate the event before passing it to the proxy,
+ * stripping the stage segment from rawPath and requestContext.http.path.
  *
  * Usage:
- *   app.register(stripStagePrefix)
+ *   return proxy(stripStageFromEvent(event), context)
  *
  * Reads STAGE env var set by SAM from the Environment CloudFormation parameter.
  * No-ops when STAGE is unset (local dev / unit tests).
  */
 
-import type { FastifyInstance, FastifyPluginAsync } from 'fastify'
-import fp from 'fastify-plugin'
+import type { APIGatewayProxyEventV2 } from 'aws-lambda'
 
-const stripStagePrefix: FastifyPluginAsync = async (app: FastifyInstance) => {
+export function stripStageFromEvent(event: APIGatewayProxyEventV2): APIGatewayProxyEventV2 {
   const stage = process.env['STAGE']
-  if (!stage) return
+  if (!stage) return event
 
   const prefix = `/${stage}`
+  const rawPath = event.rawPath ?? ''
+  if (!rawPath.startsWith(`${prefix}/`) && rawPath !== prefix) return event
 
-  app.addHook('onRequest', async (request, _reply) => {
-    const url: string = request.raw.url ?? '/'
-    if (url.startsWith(`${prefix}/`) || url === prefix) {
-      request.raw.url = url.slice(prefix.length) || '/'
-    }
-  })
+  const strippedPath = rawPath.slice(prefix.length) || '/'
+
+  return {
+    ...event,
+    rawPath: strippedPath,
+    requestContext: {
+      ...event.requestContext,
+      http: {
+        ...event.requestContext.http,
+        path: strippedPath,
+      },
+    },
+  }
 }
-
-export default fp(stripStagePrefix, {
-  fastify: '5.x',
-  name: 'strip-stage-prefix',
-})
