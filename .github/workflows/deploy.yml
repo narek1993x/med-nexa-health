@@ -120,18 +120,23 @@ jobs:
           PATH: ${{ github.workspace }}/node_modules/.bin:$PATH
 
       - name: SAM deploy
+        env:
+          PROVIDER_REGISTRY: ${{ vars.PROVIDER_REGISTRY }}
+          FX_RATES: ${{ vars.FX_RATES }}
+          STACK_NAME: ${{ vars.SAM_STACK_NAME || 'med-nexa-health-dev' }}
+          REGION: ${{ vars.AWS_REGION || env.AWS_REGION }}
         run: |
           sam deploy \
             --no-confirm-changeset \
             --no-fail-on-empty-changeset \
-            --stack-name "${{ vars.SAM_STACK_NAME || 'med-nexa-health-dev' }}" \
-            --region "${{ vars.AWS_REGION || env.AWS_REGION }}" \
+            --stack-name "$STACK_NAME" \
+            --region "$REGION" \
             --capabilities CAPABILITY_IAM \
             --parameter-overrides \
-              "Environment=dev" \
-              "LogLevel=info" \
-              "ProviderRegistry=${{ vars.PROVIDER_REGISTRY }}" \
-              "FxRates=${{ vars.FX_RATES }}"
+              "ParameterKey=Environment,ParameterValue=dev" \
+              "ParameterKey=LogLevel,ParameterValue=info" \
+              "ParameterKey=ProviderRegistry,ParameterValue=$PROVIDER_REGISTRY" \
+              "ParameterKey=FxRates,ParameterValue=$FX_RATES"
 
       - name: Get stack outputs
         id: stack-outputs
