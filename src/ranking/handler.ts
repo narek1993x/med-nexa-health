@@ -16,6 +16,7 @@ import type { APIGatewayProxyEventV2, Context } from 'aws-lambda'
 import { loadProviderRegistry } from './service/registry'
 import { loadFxTable } from './service/fx'
 import { registerRoutes } from './router'
+import stripStagePrefix from '../plugins/stripStagePrefix'
 
 // ---------------------------------------------------------------------------
 // Cold-start initialisation — runs once per Lambda container lifetime
@@ -35,6 +36,9 @@ const app = Fastify({
   },
   disableRequestLogging: false,
 })
+
+// Strip API Gateway stage prefix for HTTP API v2
+app.register(stripStagePrefix)
 
 app.setErrorHandler(
   async (error: { message?: string; code?: string; statusCode?: number }, _request, reply) => {

@@ -13,6 +13,7 @@
 import awsLambdaFastify from '@fastify/aws-lambda'
 import Fastify from 'fastify'
 import type { Offer } from '../ranking/types'
+import stripStagePrefix from '../plugins/stripStagePrefix'
 
 export function createMockHandler(offers: Offer[]): ReturnType<typeof awsLambdaFastify> {
   const app = Fastify({
@@ -20,6 +21,9 @@ export function createMockHandler(offers: Offer[]): ReturnType<typeof awsLambdaF
       level: process.env['LOG_LEVEL'] ?? 'info',
     },
   })
+
+  // Strip API Gateway stage prefix for HTTP API v2
+  app.register(stripStagePrefix)
 
   // GET /offers — returns the static offer list for this provider
   app.get('/offers', async (_request, reply) => {
