@@ -133,10 +133,31 @@ jobs:
             --region "$REGION" \
             --capabilities CAPABILITY_IAM \
             --parameter-overrides \
-              "ParameterKey=Environment,ParameterValue=dev" \
-              "ParameterKey=LogLevel,ParameterValue=info" \
-              "ParameterKey=ProviderRegistry,ParameterValue=$PROVIDER_REGISTRY" \
-              "ParameterKey=FxRates,ParameterValue=$FX_RATES"
+              "Environment=dev" \
+              "LogLevel=info"
+
+          # Inject JSON parameters directly into Lambda env vars after deploy
+          # This avoids CloudFormation parameter quoting issues with JSON values
+          FUNCTION_NAME="med-nexa-ranking-dev"
+
+          CURRENT_ENV=$(aws lambda get-function-configuration \
+            --function-name "$FUNCTION_NAME" \
+            --region "$REGION" \
+            --query 'Environment.Variables' \
+            --output json)
+
+          UPDATED_ENV=$(echo "$CURRENT_ENV" | python3 -c "
+          import json, sys, os
+          env = json.load(sys.stdin)
+          env['PROVIDER_REGISTRY'] = os.environ['PROVIDER_REGISTRY']
+          env['FX_RATES'] = os.environ['FX_RATES']
+          print(json.dumps({'Variables': env}))
+          ")
+
+          aws lambda update-function-configuration \
+            --function-name "$FUNCTION_NAME" \
+            --region "$REGION" \
+            --environment "$UPDATED_ENV"
 
       - name: Get stack outputs
         id: stack-outputs
