@@ -11,7 +11,6 @@
 import { describe, it, expect } from 'vitest'
 import Fastify from 'fastify'
 import type { Offer } from '../../src/ranking/types'
-import { createMockHandler } from '../../src/mocks/factory'
 
 // ---------------------------------------------------------------------------
 // Helpers — invoke the Lambda handler in-process via Fastify inject

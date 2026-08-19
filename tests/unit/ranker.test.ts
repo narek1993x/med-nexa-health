@@ -210,7 +210,8 @@ describe('buildReason', () => {
   })
 
   it('reason string is non-empty', () => {
-    ;[NC1001, CP2001, NC1005].forEach((offer) => {
+    const offers = [NC1001, CP2001, NC1005]
+    offers.forEach((offer) => {
       const { reason } = buildReason(offer)
       expect(reason.length).toBeGreaterThan(0)
     })
