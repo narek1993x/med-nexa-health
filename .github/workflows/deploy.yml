@@ -102,6 +102,14 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Debug — print role ARN shape (masked secret, safe to log)
+        run: |
+          ROLE_ARN="${{ secrets.AWS_DEPLOY_ROLE_ARN }}"
+          echo "ARN length: ${#ROLE_ARN}"
+          echo "ARN prefix (first 25 chars): ${ROLE_ARN:0:25}"
+          echo "ARN suffix (last 10 chars): ${ROLE_ARN: -10}"
+          echo "Starts with arn:aws:iam:: -> $(echo "$ROLE_ARN" | grep -c '^arn:aws:iam::')"
+
       - name: Configure AWS credentials (OIDC — no long-lived keys)
         uses: aws-actions/configure-aws-credentials@v4
         with:
