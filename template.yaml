@@ -11,7 +11,7 @@ Description: >
 # ---------------------------------------------------------------------------
 Globals:
   Function:
-    Runtime: nodejs20.x
+    Runtime: nodejs22.x
     Architectures:
       - arm64 # Graviton2 — better price/perf for Node workloads
     MemorySize: 512
