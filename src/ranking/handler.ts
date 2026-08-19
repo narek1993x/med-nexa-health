@@ -34,7 +34,6 @@ const app = Fastify({
       },
     },
   },
-  disableRequestLogging: false,
 })
 
 // Strip API Gateway stage prefix for HTTP API v2
