@@ -1,0 +1,193 @@
+name: CI/CD — MedNexa Health Ranking Service
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+# Prevent concurrent deploys to the same environment.
+# PRs can run in parallel; main deploys are serialised.
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  # OIDC token exchange — required for keyless AWS authentication
+  id-token: write
+  # Read repo contents for checkout
+  contents: read
+
+env:
+  NODE_VERSION: '22'
+  AWS_REGION: eu-west-1
+  SAM_VERSION: '1.127.0'
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Job 1: lint-and-test
+  # Runs on every push and pull_request.
+  # Required gate — deploy never runs if this fails.
+  # ---------------------------------------------------------------------------
+  lint-and-test:
+    name: Lint, Type-check & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type-check (tsc --noEmit)
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test with coverage
+        run: npm run test:coverage
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          path: coverage/
+          retention-days: 30
+
+  # ---------------------------------------------------------------------------
+  # Job 2: deploy
+  # Runs on push to main only (not on PRs).
+  # Uses OIDC — no AWS access keys stored as GitHub secrets.
+  #
+  # Required GitHub secret:
+  #   AWS_DEPLOY_ROLE_ARN — ARN of the IAM role with OIDC trust policy
+  #                         (not a credential — safe to treat as non-secret,
+  #                          stored as secret for environment isolation)
+  #
+  # Required GitHub variables (Settings → Variables):
+  #   AWS_REGION          — target region (default: eu-west-1)
+  #   SAM_STACK_NAME      — CloudFormation stack name
+  #   PROVIDER_REGISTRY   — JSON array of provider configs
+  #   FX_RATES            — JSON FX rate table
+  # ---------------------------------------------------------------------------
+  deploy:
+    name: Deploy to AWS (dev)
+    runs-on: ubuntu-latest
+    needs: lint-and-test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    environment: dev
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Configure AWS credentials (OIDC — no long-lived keys)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || env.AWS_REGION }}
+          role-session-name: med-nexa-health-deploy-${{ github.run_id }}
+
+      - name: Set up AWS SAM CLI
+        uses: aws-actions/setup-sam@v2
+        with:
+          version: ${{ env.SAM_VERSION }}
+
+      - name: SAM build
+        run: sam build --parallel
+
+      - name: SAM deploy
+        run: |
+          sam deploy \
+            --no-confirm-changeset \
+            --no-fail-on-empty-changeset \
+            --stack-name "${{ vars.SAM_STACK_NAME || 'med-nexa-health-dev' }}" \
+            --region "${{ vars.AWS_REGION || env.AWS_REGION }}" \
+            --capabilities CAPABILITY_IAM \
+            --parameter-overrides \
+              "Environment=dev" \
+              "LogLevel=info" \
+              "ProviderRegistry=${{ vars.PROVIDER_REGISTRY }}" \
+              "FxRates=${{ vars.FX_RATES }}"
+
+      - name: Get stack outputs
+        id: stack-outputs
+        run: |
+          STACK_NAME="${{ vars.SAM_STACK_NAME || 'med-nexa-health-dev' }}"
+          REGION="${{ vars.AWS_REGION || env.AWS_REGION }}"
+
+          API_URL=$(aws cloudformation describe-stacks \
+            --stack-name "$STACK_NAME" \
+            --region "$REGION" \
+            --query "Stacks[0].Outputs[?OutputKey=='BestCareOptionsUrl'].OutputValue" \
+            --output text)
+
+          NORTHCARE_URL=$(aws cloudformation describe-stacks \
+            --stack-name "$STACK_NAME" \
+            --region "$REGION" \
+            --query "Stacks[0].Outputs[?OutputKey=='NorthcareMockUrl'].OutputValue" \
+            --output text)
+
+          CAREPOINT_URL=$(aws cloudformation describe-stacks \
+            --stack-name "$STACK_NAME" \
+            --region "$REGION" \
+            --query "Stacks[0].Outputs[?OutputKey=='CarePointMockUrl'].OutputValue" \
+            --output text)
+
+          echo "api_url=$API_URL" >> "$GITHUB_OUTPUT"
+          echo "northcare_url=$NORTHCARE_URL" >> "$GITHUB_OUTPUT"
+          echo "carepoint_url=$CAREPOINT_URL" >> "$GITHUB_OUTPUT"
+
+      - name: Print deployed endpoint URLs
+        run: |
+          echo "## Deployment Summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Endpoint | URL |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|----------|-----|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| GET /best-care-options | ${{ steps.stack-outputs.outputs.api_url }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| NorthCare mock | ${{ steps.stack-outputs.outputs.northcare_url }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| CarePoint mock | ${{ steps.stack-outputs.outputs.carepoint_url }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Example request" >> "$GITHUB_STEP_SUMMARY"
+          echo '```bash' >> "$GITHUB_STEP_SUMMARY"
+          echo 'curl "${{ steps.stack-outputs.outputs.api_url }}?service_code=MRI_BRAIN&city=Yerevan&patient_currency=AMD&max_distance_km=15&max_wait_hours=72&insurance_plan=MedPrime"' >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Smoke test deployed endpoint
+        run: |
+          API_URL="${{ steps.stack-outputs.outputs.api_url }}"
+          if [ -z "$API_URL" ]; then
+            echo "Warning: Could not retrieve API URL from stack outputs"
+            exit 0
+          fi
+
+          HTTP_STATUS=$(curl --silent --output /dev/null --write-out "%{http_code}" \
+            "${API_URL}?service_code=MRI_BRAIN&city=Yerevan&patient_currency=AMD&max_distance_km=15&max_wait_hours=72&insurance_plan=MedPrime")
+
+          echo "Smoke test HTTP status: $HTTP_STATUS"
+          if [ "$HTTP_STATUS" != "200" ]; then
+            echo "Smoke test failed — expected 200, got $HTTP_STATUS"
+            exit 1
+          fi
+          echo "Smoke test passed."

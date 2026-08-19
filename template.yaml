@@ -1,0 +1,214 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+
+Description: >
+  MedNexa Health — Unified Care Offer Ranking Service
+  Provides GET /best-care-options with parallel provider aggregation,
+  FX conversion, insurance discounting, and composite value scoring.
+
+# ---------------------------------------------------------------------------
+# Global defaults applied to all Functions unless overridden
+# ---------------------------------------------------------------------------
+Globals:
+  Function:
+    Runtime: nodejs20.x
+    Architectures:
+      - arm64 # Graviton2 — better price/perf for Node workloads
+    MemorySize: 512
+    Timeout: 30
+    Environment:
+      Variables:
+        NODE_OPTIONS: '--enable-source-maps'
+        LOG_LEVEL: !Ref LogLevel
+
+# ---------------------------------------------------------------------------
+# Parameters
+# ---------------------------------------------------------------------------
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, staging, prod]
+    Description: Deployment environment
+
+  LogLevel:
+    Type: String
+    Default: info
+    AllowedValues: [debug, info, warn, error]
+    Description: Pino log level for all functions
+
+  ProviderRegistry:
+    Type: String
+    Description: >
+      JSON array of provider configs.
+      Format: [{"provider_id":"northcare","offers_url":"https://...","enabled":true},...]
+      To add a new provider, update this parameter — no code changes required.
+
+  FxRates:
+    Type: String
+    Default: '{"AMD":{"USD":0.00261,"AMD":1},"USD":{"AMD":383.14,"USD":1}}'
+    Description: >
+      JSON FX rate table for currency conversion.
+      Format: {"FROM":{"TO":rate}}
+
+# ---------------------------------------------------------------------------
+# Resources
+# ---------------------------------------------------------------------------
+Resources:
+  # -------------------------------------------------------------------------
+  # API Gateway — single HTTP API shared by all functions
+  # -------------------------------------------------------------------------
+  MedNexaApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: !Ref Environment
+      Description: MedNexa Health Care Marketplace API
+      CorsConfiguration:
+        AllowMethods:
+          - GET
+          - OPTIONS
+        AllowHeaders:
+          - Content-Type
+          - X-Request-ID
+        AllowOrigins:
+          - '*' # Tighten to specific domains in prod
+      Tags:
+        Project: med-nexa-health
+        Environment: !Ref Environment
+
+  # -------------------------------------------------------------------------
+  # Ranking Lambda — core service
+  # -------------------------------------------------------------------------
+  RankingFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'med-nexa-ranking-${Environment}'
+      Description: Aggregates provider offers, scores, deduplicates, and ranks them
+      Handler: handler.handler
+      CodeUri: .
+      Environment:
+        Variables:
+          PROVIDER_REGISTRY: !Ref ProviderRegistry
+          FX_RATES: !Ref FxRates
+      Events:
+        GetBestCareOptions:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref MedNexaApi
+            Path: /best-care-options
+            Method: GET
+      Tags:
+        Project: med-nexa-health
+        Environment: !Ref Environment
+        Role: ranking-service
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: false
+        Target: es2022
+        Format: cjs
+        EntryPoints:
+          - src/ranking/handler.ts
+        External:
+          - 'node:*'
+          - '@aws-sdk/*'
+
+  # -------------------------------------------------------------------------
+  # NorthCare mock provider Lambda
+  # -------------------------------------------------------------------------
+  NorthcareMockFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'med-nexa-mock-northcare-${Environment}'
+      Description: Mock NorthCare provider serving static MRI_BRAIN offers
+      Handler: handler.handler
+      CodeUri: .
+      Events:
+        GetNorthcareOffers:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref MedNexaApi
+            Path: /provider/northcare/offers
+            Method: GET
+      Tags:
+        Project: med-nexa-health
+        Environment: !Ref Environment
+        Role: mock-provider
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: false
+        Target: es2022
+        Format: cjs
+        EntryPoints:
+          - src/mocks/northcare.ts
+        External:
+          - 'node:*'
+          - '@aws-sdk/*'
+
+  # -------------------------------------------------------------------------
+  # CarePoint mock provider Lambda
+  # -------------------------------------------------------------------------
+  CarePointMockFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'med-nexa-mock-carepoint-${Environment}'
+      Description: Mock CarePoint provider serving static MRI_BRAIN offers
+      Handler: handler.handler
+      CodeUri: .
+      Events:
+        GetCarePointOffers:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref MedNexaApi
+            Path: /provider/carepoint/offers
+            Method: GET
+      Tags:
+        Project: med-nexa-health
+        Environment: !Ref Environment
+        Role: mock-provider
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: false
+        Target: es2022
+        Format: cjs
+        EntryPoints:
+          - src/mocks/carepoint.ts
+        External:
+          - 'node:*'
+          - '@aws-sdk/*'
+
+# ---------------------------------------------------------------------------
+# Outputs
+# ---------------------------------------------------------------------------
+Outputs:
+  ApiBaseUrl:
+    Description: Base URL of the MedNexa Health API
+    Value: !Sub 'https://${MedNexaApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}'
+    Export:
+      Name: !Sub '${AWS::StackName}-ApiBaseUrl'
+
+  BestCareOptionsUrl:
+    Description: Full URL of the GET /best-care-options endpoint
+    Value: !Sub 'https://${MedNexaApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/best-care-options'
+    Export:
+      Name: !Sub '${AWS::StackName}-BestCareOptionsUrl'
+
+  RankingFunctionArn:
+    Description: ARN of the Ranking Lambda function
+    Value: !GetAtt RankingFunction.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-RankingFunctionArn'
+
+  NorthcareMockUrl:
+    Description: URL of the NorthCare mock provider endpoint
+    Value: !Sub 'https://${MedNexaApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/provider/northcare/offers'
+    Export:
+      Name: !Sub '${AWS::StackName}-NorthcareMockUrl'
+
+  CarePointMockUrl:
+    Description: URL of the CarePoint mock provider endpoint
+    Value: !Sub 'https://${MedNexaApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/provider/carepoint/offers'
+    Export:
+      Name: !Sub '${AWS::StackName}-CarePointMockUrl'

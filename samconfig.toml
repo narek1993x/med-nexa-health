@@ -1,0 +1,67 @@
+# AWS SAM deployment configuration for MedNexa Health ranking service.
+# Override individual values per environment using SAM CLI flags:
+#   sam deploy --config-env staging
+#
+# IMPORTANT: Never commit real secrets here. All sensitive values must
+# be injected via environment-specific parameter files or CI/CD secrets.
+
+version = 0.1
+
+# ---------------------------------------------------------------------------
+# Default environment (dev / local testing)
+# ---------------------------------------------------------------------------
+[default.global.parameters]
+stack_name       = "med-nexa-health-dev"
+region           = "eu-west-1"
+confirm_changeset = false
+fail_on_empty_changeset = false
+resolve_s3       = true
+
+[default.deploy.parameters]
+capabilities = "CAPABILITY_IAM"
+parameter_overrides = [
+  "Environment=dev",
+  "LogLevel=debug",
+  # PROVIDER_REGISTRY points to the deployed mock Lambda URLs.
+  # After first deploy, update these URLs from the CloudFormation stack outputs.
+  # Format: JSON array — adding a new provider = update this value, no code changes.
+  "ProviderRegistry=[{\"provider_id\":\"northcare\",\"offers_url\":\"REPLACE_WITH_NORTHCARE_URL\",\"enabled\":true},{\"provider_id\":\"carepoint\",\"offers_url\":\"REPLACE_WITH_CAREPOINT_URL\",\"enabled\":true}]",
+  # FX rates — override with current rates for production
+  "FxRates={\"AMD\":{\"USD\":0.00261,\"AMD\":1},\"USD\":{\"AMD\":383.14,\"USD\":1}}"
+]
+tags = "Project=med-nexa-health Environment=dev"
+
+# ---------------------------------------------------------------------------
+# Staging environment
+# ---------------------------------------------------------------------------
+[staging.global.parameters]
+stack_name = "med-nexa-health-staging"
+region     = "eu-west-1"
+
+[staging.deploy.parameters]
+capabilities = "CAPABILITY_IAM"
+parameter_overrides = [
+  "Environment=staging",
+  "LogLevel=info",
+  "ProviderRegistry=[{\"provider_id\":\"northcare\",\"offers_url\":\"REPLACE_WITH_STAGING_NORTHCARE_URL\",\"enabled\":true},{\"provider_id\":\"carepoint\",\"offers_url\":\"REPLACE_WITH_STAGING_CAREPOINT_URL\",\"enabled\":true}]",
+  "FxRates={\"AMD\":{\"USD\":0.00261,\"AMD\":1},\"USD\":{\"AMD\":383.14,\"USD\":1}}"
+]
+tags = "Project=med-nexa-health Environment=staging"
+
+# ---------------------------------------------------------------------------
+# Production environment
+# ---------------------------------------------------------------------------
+[prod.global.parameters]
+stack_name        = "med-nexa-health-prod"
+region            = "eu-west-1"
+confirm_changeset = true  # require manual confirmation in prod
+
+[prod.deploy.parameters]
+capabilities = "CAPABILITY_IAM"
+parameter_overrides = [
+  "Environment=prod",
+  "LogLevel=warn",
+  "ProviderRegistry=REPLACE_WITH_PROD_REGISTRY_JSON",
+  "FxRates=REPLACE_WITH_PROD_FX_RATES_JSON"
+]
+tags = "Project=med-nexa-health Environment=prod"
