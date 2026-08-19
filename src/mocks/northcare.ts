@@ -81,4 +81,4 @@ const NORTHCARE_OFFERS: Offer[] = [
   },
 ]
 
-export const handler = createMockHandler(NORTHCARE_OFFERS)
+export const handler = createMockHandler(NORTHCARE_OFFERS, '/provider/northcare/offers')

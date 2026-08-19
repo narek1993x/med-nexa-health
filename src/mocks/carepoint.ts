@@ -76,4 +76,4 @@ const CAREPOINT_OFFERS: Offer[] = [
   },
 ]
 
-export const handler = createMockHandler(CAREPOINT_OFFERS)
+export const handler = createMockHandler(CAREPOINT_OFFERS, '/provider/carepoint/offers')

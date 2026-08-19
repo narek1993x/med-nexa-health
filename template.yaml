@@ -122,7 +122,7 @@ Resources:
     Properties:
       FunctionName: !Sub 'med-nexa-mock-northcare-${Environment}'
       Description: Mock NorthCare provider serving static MRI_BRAIN offers
-      Handler: handler.handler
+      Handler: northcare.handler
       CodeUri: .
       Events:
         GetNorthcareOffers:
@@ -155,7 +155,7 @@ Resources:
     Properties:
       FunctionName: !Sub 'med-nexa-mock-carepoint-${Environment}'
       Description: Mock CarePoint provider serving static MRI_BRAIN offers
-      Handler: handler.handler
+      Handler: carepoint.handler
       CodeUri: .
       Events:
         GetCarePointOffers:
