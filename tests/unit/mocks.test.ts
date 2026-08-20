@@ -1,19 +1,19 @@
 /**
  * Unit tests for mock provider handlers.
  *
- * Tests verify:
- * - Each mock returns HTTP 200
- * - Response body matches the exact spec sample payloads
- * - Factory handles empty offer list correctly
- * - All required Offer fields are present
+ * Offer data is imported directly from the mock source files — single source
+ * of truth. Any change to the mock data is automatically reflected here.
  */
 
 import { describe, it, expect } from 'vitest'
 import Fastify from 'fastify'
 import type { Offer } from '../../src/ranking/types'
+import { NORTHCARE_OFFERS } from '../../src/mocks/northcare'
+import { CAREPOINT_OFFERS } from '../../src/mocks/carepoint'
+import { MEDCENTER_OFFERS } from '../../src/mocks/medcenter'
 
 // ---------------------------------------------------------------------------
-// Helpers — invoke the Lambda handler in-process via Fastify inject
+// Helper — build a minimal Fastify app serving a static offer list
 // ---------------------------------------------------------------------------
 
 async function buildMockApp(offers: Offer[]): Promise<ReturnType<typeof Fastify>> {
@@ -29,122 +29,42 @@ async function buildMockApp(offers: Offer[]): Promise<ReturnType<typeof Fastify>
 }
 
 // ---------------------------------------------------------------------------
-// NorthCare mock data (matches spec exactly)
-// ---------------------------------------------------------------------------
-
-const NORTHCARE_OFFERS: Offer[] = [
-  {
-    offer_id: 'NC-1001',
-    provider_id: 'northcare',
-    service_code: 'MRI_BRAIN',
-    city: 'Yerevan',
-    currency: 'AMD',
-    price_amount: 95000,
-    earliest_slot_utc: '2026-09-02T09:00:00Z',
-    wait_hours: 20,
-    distance_km: 3.2,
-    quality_score: 88,
-    insurance_plans: ['MedPrime', 'SilverShield'],
-  },
-  {
-    offer_id: 'NC-1005',
-    provider_id: 'northcare',
-    service_code: 'MRI_BRAIN',
-    city: 'Yerevan',
-    currency: 'USD',
-    price_amount: 230,
-    earliest_slot_utc: '2026-09-02T18:15:00Z',
-    wait_hours: 28,
-    distance_km: 11.9,
-    quality_score: 90,
-    insurance_plans: [],
-  },
-]
-
-// ---------------------------------------------------------------------------
-// CarePoint mock data (matches spec exactly)
-// ---------------------------------------------------------------------------
-
-const CAREPOINT_OFFERS: Offer[] = [
-  {
-    offer_id: 'CP-2001',
-    provider_id: 'carepoint',
-    service_code: 'MRI_BRAIN',
-    city: 'Yerevan',
-    currency: 'AMD',
-    price_amount: 91000,
-    earliest_slot_utc: '2026-09-02T10:30:00Z',
-    wait_hours: 22,
-    distance_km: 4.0,
-    quality_score: 86,
-    insurance_plans: ['MedPrime', 'CarePlus'],
-  },
-  {
-    offer_id: 'CP-2005',
-    provider_id: 'carepoint',
-    service_code: 'MRI_BRAIN',
-    city: 'Vanadzor',
-    currency: 'AMD',
-    price_amount: 76000,
-    earliest_slot_utc: '2026-09-05T11:00:00Z',
-    wait_hours: 60,
-    distance_km: 3.5,
-    quality_score: 78,
-    insurance_plans: ['CarePlus'],
-  },
-]
-
-// ---------------------------------------------------------------------------
-// Tests
+// NorthCare
 // ---------------------------------------------------------------------------
 
 describe('Mock provider: NorthCare', () => {
-  it('returns 200 with all offers', async () => {
+  it('returns 200 with all 5 offers', async () => {
     const app = await buildMockApp(NORTHCARE_OFFERS)
     const res = await app.inject({ method: 'GET', url: '/offers' })
 
     expect(res.statusCode).toBe(200)
-    const body = res.json<Offer[]>()
-    expect(body).toHaveLength(2)
+    expect(res.json<Offer[]>()).toHaveLength(5)
   })
 
-  it('returns offers with correct provider_id', async () => {
+  it('all offers have provider_id northcare', async () => {
     const app = await buildMockApp(NORTHCARE_OFFERS)
     const res = await app.inject({ method: 'GET', url: '/offers' })
-    const body = res.json<Offer[]>()
 
-    body.forEach((offer) => {
-      expect(offer.provider_id).toBe('northcare')
-    })
+    res.json<Offer[]>().forEach((o) => expect(o.provider_id).toBe('northcare'))
   })
 
-  it('returns offers with correct offer_ids', async () => {
+  it('contains NC-1001 through NC-1005', async () => {
     const app = await buildMockApp(NORTHCARE_OFFERS)
     const res = await app.inject({ method: 'GET', url: '/offers' })
-    const body = res.json<Offer[]>()
-    const ids = body.map((o) => o.offer_id)
+    const ids = res.json<Offer[]>().map((o) => o.offer_id)
 
     expect(ids).toContain('NC-1001')
+    expect(ids).toContain('NC-1002')
+    expect(ids).toContain('NC-1003')
+    expect(ids).toContain('NC-1004')
     expect(ids).toContain('NC-1005')
   })
 
-  it('returns offers with correct service_code MRI_BRAIN', async () => {
+  it('NC-1001 has AMD currency, MedPrime insurance, and correct price', async () => {
     const app = await buildMockApp(NORTHCARE_OFFERS)
     const res = await app.inject({ method: 'GET', url: '/offers' })
-    const body = res.json<Offer[]>()
+    const nc1001 = res.json<Offer[]>().find((o) => o.offer_id === 'NC-1001')
 
-    body.forEach((offer) => {
-      expect(offer.service_code).toBe('MRI_BRAIN')
-    })
-  })
-
-  it('NC-1001 has AMD currency and insurance plans', async () => {
-    const app = await buildMockApp(NORTHCARE_OFFERS)
-    const res = await app.inject({ method: 'GET', url: '/offers' })
-    const body = res.json<Offer[]>()
-    const nc1001 = body.find((o) => o.offer_id === 'NC-1001')
-
-    expect(nc1001).toBeDefined()
     expect(nc1001?.currency).toBe('AMD')
     expect(nc1001?.price_amount).toBe(95000)
     expect(nc1001?.insurance_plans).toContain('MedPrime')
@@ -154,13 +74,27 @@ describe('Mock provider: NorthCare', () => {
   it('NC-1005 has USD currency and empty insurance plans', async () => {
     const app = await buildMockApp(NORTHCARE_OFFERS)
     const res = await app.inject({ method: 'GET', url: '/offers' })
-    const body = res.json<Offer[]>()
-    const nc1005 = body.find((o) => o.offer_id === 'NC-1005')
+    const nc1005 = res.json<Offer[]>().find((o) => o.offer_id === 'NC-1005')
 
-    expect(nc1005).toBeDefined()
     expect(nc1005?.currency).toBe('USD')
     expect(nc1005?.price_amount).toBe(230)
     expect(nc1005?.insurance_plans).toHaveLength(0)
+  })
+
+  it('NC-1004 is in Gyumri (different city)', async () => {
+    const app = await buildMockApp(NORTHCARE_OFFERS)
+    const res = await app.inject({ method: 'GET', url: '/offers' })
+    const nc1004 = res.json<Offer[]>().find((o) => o.offer_id === 'NC-1004')
+
+    expect(nc1004?.city).toBe('Gyumri')
+  })
+
+  it('NC-1003 is CT_CHEST service (different service code)', async () => {
+    const app = await buildMockApp(NORTHCARE_OFFERS)
+    const res = await app.inject({ method: 'GET', url: '/offers' })
+    const nc1003 = res.json<Offer[]>().find((o) => o.offer_id === 'NC-1003')
+
+    expect(nc1003?.service_code).toBe('CT_CHEST')
   })
 
   it('returns health check 200', async () => {
@@ -172,59 +106,133 @@ describe('Mock provider: NorthCare', () => {
   })
 })
 
+// ---------------------------------------------------------------------------
+// CarePoint
+// ---------------------------------------------------------------------------
+
 describe('Mock provider: CarePoint', () => {
-  it('returns 200 with all offers', async () => {
+  it('returns 200 with all 5 offers', async () => {
     const app = await buildMockApp(CAREPOINT_OFFERS)
     const res = await app.inject({ method: 'GET', url: '/offers' })
 
     expect(res.statusCode).toBe(200)
-    const body = res.json<Offer[]>()
-    expect(body).toHaveLength(2)
+    expect(res.json<Offer[]>()).toHaveLength(5)
   })
 
-  it('returns offers with correct provider_id', async () => {
+  it('all offers have provider_id carepoint', async () => {
     const app = await buildMockApp(CAREPOINT_OFFERS)
     const res = await app.inject({ method: 'GET', url: '/offers' })
-    const body = res.json<Offer[]>()
 
-    body.forEach((offer) => {
-      expect(offer.provider_id).toBe('carepoint')
-    })
+    res.json<Offer[]>().forEach((o) => expect(o.provider_id).toBe('carepoint'))
   })
 
-  it('returns offers with correct offer_ids', async () => {
+  it('contains CP-2001 through CP-2005', async () => {
     const app = await buildMockApp(CAREPOINT_OFFERS)
     const res = await app.inject({ method: 'GET', url: '/offers' })
-    const body = res.json<Offer[]>()
-    const ids = body.map((o) => o.offer_id)
+    const ids = res.json<Offer[]>().map((o) => o.offer_id)
 
     expect(ids).toContain('CP-2001')
+    expect(ids).toContain('CP-2002')
+    expect(ids).toContain('CP-2003')
+    expect(ids).toContain('CP-2004')
     expect(ids).toContain('CP-2005')
   })
 
   it('CP-2001 is in Yerevan with MedPrime insurance', async () => {
     const app = await buildMockApp(CAREPOINT_OFFERS)
     const res = await app.inject({ method: 'GET', url: '/offers' })
-    const body = res.json<Offer[]>()
-    const cp2001 = body.find((o) => o.offer_id === 'CP-2001')
+    const cp2001 = res.json<Offer[]>().find((o) => o.offer_id === 'CP-2001')
 
-    expect(cp2001).toBeDefined()
     expect(cp2001?.city).toBe('Yerevan')
     expect(cp2001?.insurance_plans).toContain('MedPrime')
     expect(cp2001?.quality_score).toBe(86)
   })
 
+  it('CP-2002 has EUR currency', async () => {
+    const app = await buildMockApp(CAREPOINT_OFFERS)
+    const res = await app.inject({ method: 'GET', url: '/offers' })
+    const cp2002 = res.json<Offer[]>().find((o) => o.offer_id === 'CP-2002')
+
+    expect(cp2002?.currency).toBe('EUR')
+    expect(cp2002?.price_amount).toBe(210)
+  })
+
   it('CP-2005 is in Vanadzor (different city)', async () => {
     const app = await buildMockApp(CAREPOINT_OFFERS)
     const res = await app.inject({ method: 'GET', url: '/offers' })
-    const body = res.json<Offer[]>()
-    const cp2005 = body.find((o) => o.offer_id === 'CP-2005')
+    const cp2005 = res.json<Offer[]>().find((o) => o.offer_id === 'CP-2005')
 
-    expect(cp2005).toBeDefined()
     expect(cp2005?.city).toBe('Vanadzor')
     expect(cp2005?.insurance_plans).not.toContain('MedPrime')
   })
 })
+
+// ---------------------------------------------------------------------------
+// MedCenter
+// ---------------------------------------------------------------------------
+
+describe('Mock provider: MedCenter', () => {
+  it('returns 200 with all 5 offers', async () => {
+    const app = await buildMockApp(MEDCENTER_OFFERS)
+    const res = await app.inject({ method: 'GET', url: '/offers' })
+
+    expect(res.statusCode).toBe(200)
+    expect(res.json<Offer[]>()).toHaveLength(5)
+  })
+
+  it('all offers have provider_id medcenter', async () => {
+    const app = await buildMockApp(MEDCENTER_OFFERS)
+    const res = await app.inject({ method: 'GET', url: '/offers' })
+
+    res.json<Offer[]>().forEach((o) => expect(o.provider_id).toBe('medcenter'))
+  })
+
+  it('MC-3001 shares slot with NC-1001 (dedup candidate)', async () => {
+    const app = await buildMockApp(MEDCENTER_OFFERS)
+    const res = await app.inject({ method: 'GET', url: '/offers' })
+    const mc3001 = res.json<Offer[]>().find((o) => o.offer_id === 'MC-3001')
+
+    expect(mc3001?.earliest_slot_utc).toBe('2026-09-02T09:00:00Z')
+    expect(mc3001?.service_code).toBe('MRI_BRAIN')
+    expect(mc3001?.city).toBe('Yerevan')
+  })
+
+  it('MC-3002 shares slot with CP-2001 (dedup candidate)', async () => {
+    const app = await buildMockApp(MEDCENTER_OFFERS)
+    const res = await app.inject({ method: 'GET', url: '/offers' })
+    const mc3002 = res.json<Offer[]>().find((o) => o.offer_id === 'MC-3002')
+
+    expect(mc3002?.earliest_slot_utc).toBe('2026-09-02T10:30:00Z')
+    expect(mc3002?.service_code).toBe('MRI_BRAIN')
+    expect(mc3002?.city).toBe('Yerevan')
+  })
+
+  it('MC-3001 has lower quality than NC-1001 — will lose dedup', async () => {
+    const nc1001 = NORTHCARE_OFFERS.find((o) => o.offer_id === 'NC-1001')
+    const mc3001 = MEDCENTER_OFFERS.find((o) => o.offer_id === 'MC-3001')
+
+    expect(mc3001?.quality_score).toBeLessThan(nc1001?.quality_score ?? 0)
+  })
+
+  it('MC-3002 has lower quality than CP-2001 — will lose dedup', async () => {
+    const cp2001 = CAREPOINT_OFFERS.find((o) => o.offer_id === 'CP-2001')
+    const mc3002 = MEDCENTER_OFFERS.find((o) => o.offer_id === 'MC-3002')
+
+    expect(mc3002?.quality_score).toBeLessThan(cp2001?.quality_score ?? 0)
+  })
+
+  it('MC-3005 is in Gyumri (filtered out by city)', async () => {
+    const app = await buildMockApp(MEDCENTER_OFFERS)
+    const res = await app.inject({ method: 'GET', url: '/offers' })
+    const mc3005 = res.json<Offer[]>().find((o) => o.offer_id === 'MC-3005')
+
+    expect(mc3005?.city).toBe('Gyumri')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Factory edge cases
+// ---------------------------------------------------------------------------
 
 describe('Mock factory: edge cases', () => {
   it('returns empty array when no offers provided', async () => {
@@ -236,19 +244,16 @@ describe('Mock factory: edge cases', () => {
   })
 
   it('returns single offer correctly', async () => {
-    const singleOffer: Offer[] = [NORTHCARE_OFFERS[0]]
-    const app = await buildMockApp(singleOffer)
+    const app = await buildMockApp([NORTHCARE_OFFERS[0]])
     const res = await app.inject({ method: 'GET', url: '/offers' })
 
-    expect(res.statusCode).toBe(200)
     expect(res.json<Offer[]>()).toHaveLength(1)
     expect(res.json<Offer[]>()[0].offer_id).toBe('NC-1001')
   })
 
-  it('all required Offer fields are present in response', async () => {
+  it('all required Offer fields are present', async () => {
     const app = await buildMockApp(NORTHCARE_OFFERS)
     const res = await app.inject({ method: 'GET', url: '/offers' })
-    const body = res.json<Offer[]>()
     const requiredFields: (keyof Offer)[] = [
       'offer_id',
       'provider_id',
@@ -263,10 +268,8 @@ describe('Mock factory: edge cases', () => {
       'insurance_plans',
     ]
 
-    body.forEach((offer) => {
-      requiredFields.forEach((field) => {
-        expect(offer).toHaveProperty(field)
-      })
+    res.json<Offer[]>().forEach((offer) => {
+      requiredFields.forEach((field) => expect(offer).toHaveProperty(field))
     })
   })
 })

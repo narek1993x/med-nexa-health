@@ -21,8 +21,8 @@ export function filterByServiceAndCity(
 
   return offers.filter(
     (o) =>
-      o.service_code.trim().toUpperCase() === normalizedCode &&
-      o.city.trim().toLowerCase() === normalizedCity,
+      o?.service_code.trim().toUpperCase() === normalizedCode &&
+      o?.city.trim().toLowerCase() === normalizedCity,
   )
 }
 
@@ -38,7 +38,5 @@ export function filterByConstraints(
   maxDistanceKm: number,
   maxWaitHours: number,
 ): Offer[] {
-  return offers.filter(
-    (o) => o.distance_km <= maxDistanceKm && o.wait_hours <= maxWaitHours,
-  )
+  return offers.filter((o) => o.distance_km <= maxDistanceKm && o.wait_hours <= maxWaitHours)
 }

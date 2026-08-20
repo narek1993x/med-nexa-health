@@ -8,7 +8,7 @@
 import { createMockHandler } from './factory'
 import type { Offer } from '../ranking/types'
 
-const CAREPOINT_OFFERS: Offer[] = [
+export const CAREPOINT_OFFERS: Offer[] = [
   {
     offer_id: 'CP-2001',
     provider_id: 'carepoint',

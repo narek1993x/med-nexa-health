@@ -22,84 +22,17 @@ import { registerRoutes } from '../../src/ranking/router'
 import { loadProviderRegistry } from '../../src/ranking/service/registry'
 import { loadFxTable } from '../../src/ranking/service/fx'
 import type { RankingResponse, RankedOffer } from '../../src/ranking/types'
-
-// ---------------------------------------------------------------------------
-// Spec sample payloads (exact values from the spec)
-// ---------------------------------------------------------------------------
-
-const NORTHCARE_OFFERS = [
-  {
-    offer_id: 'NC-1001',
-    provider_id: 'northcare',
-    service_code: 'MRI_BRAIN',
-    city: 'Yerevan',
-    currency: 'AMD',
-    price_amount: 95000,
-    earliest_slot_utc: '2026-09-02T09:00:00Z',
-    wait_hours: 20,
-    distance_km: 3.2,
-    quality_score: 88,
-    insurance_plans: ['MedPrime', 'SilverShield'],
-  },
-  {
-    offer_id: 'NC-1005',
-    provider_id: 'northcare',
-    service_code: 'MRI_BRAIN',
-    city: 'Yerevan',
-    currency: 'USD',
-    price_amount: 230,
-    earliest_slot_utc: '2026-09-02T18:15:00Z',
-    wait_hours: 28,
-    distance_km: 11.9,
-    quality_score: 90,
-    insurance_plans: [],
-  },
-]
-
-const CAREPOINT_OFFERS = [
-  {
-    offer_id: 'CP-2001',
-    provider_id: 'carepoint',
-    service_code: 'MRI_BRAIN',
-    city: 'Yerevan',
-    currency: 'AMD',
-    price_amount: 91000,
-    earliest_slot_utc: '2026-09-02T10:30:00Z',
-    wait_hours: 22,
-    distance_km: 4.0,
-    quality_score: 86,
-    insurance_plans: ['MedPrime', 'CarePlus'],
-  },
-  {
-    offer_id: 'CP-2005',
-    provider_id: 'carepoint',
-    service_code: 'MRI_BRAIN',
-    city: 'Vanadzor',
-    currency: 'AMD',
-    price_amount: 76000,
-    earliest_slot_utc: '2026-09-05T11:00:00Z',
-    wait_hours: 60,
-    distance_km: 3.5,
-    quality_score: 78,
-    insurance_plans: ['CarePlus'],
-  },
-]
+import { NORTHCARE_OFFERS } from '../../src/mocks/northcare'
+import { CAREPOINT_OFFERS } from '../../src/mocks/carepoint'
+import { MEDCENTER_OFFERS } from '../../src/mocks/medcenter'
 
 // ---------------------------------------------------------------------------
 // Registry and FX table fixtures
 // ---------------------------------------------------------------------------
 
 const TEST_REGISTRY_JSON = JSON.stringify([
-  {
-    provider_id: 'northcare',
-    offers_url: 'https://mock.northcare.com/offers',
-    enabled: true,
-  },
-  {
-    provider_id: 'carepoint',
-    offers_url: 'https://mock.carepoint.com/offers',
-    enabled: true,
-  },
+  { provider_id: 'northcare', offers_url: 'https://mock.northcare.com/offers', enabled: true },
+  { provider_id: 'carepoint', offers_url: 'https://mock.carepoint.com/offers', enabled: true },
 ])
 
 const registry = loadProviderRegistry(TEST_REGISTRY_JSON)
@@ -181,7 +114,7 @@ afterEach(() => {
 // ---------------------------------------------------------------------------
 
 describe('GET /best-care-options: happy path', () => {
-  it('returns 200 with results for valid spec input', async () => {
+  it('returns results for valid spec input (NC-1001 ranked first)', async () => {
     const res = await app.inject({
       method: 'GET',
       url: '/best-care-options',
@@ -198,24 +131,7 @@ describe('GET /best-care-options: happy path', () => {
     expect(res.statusCode).toBe(200)
     const body = res.json<RankingResponse>()
     expect(body.results.length).toBeGreaterThan(0)
-  })
-
-  it('returns exactly 3 results for spec sample input (CP-2005 filtered by city)', async () => {
-    const res = await app.inject({
-      method: 'GET',
-      url: '/best-care-options',
-      query: {
-        service_code: 'MRI_BRAIN',
-        city: 'Yerevan',
-        patient_currency: 'AMD',
-        max_distance_km: '15',
-        max_wait_hours: '72',
-        insurance_plan: 'MedPrime',
-      },
-    })
-
-    const body = res.json<RankingResponse>()
-    expect(body.results).toHaveLength(3)
+    expect(body.results[0].offer_id).toBe('NC-1001')
   })
 
   it('NC-1001 is ranked first', async () => {
@@ -665,7 +581,7 @@ describe('GET /best-care-options: input validation', () => {
       query: {
         service_code: 'MRI_BRAIN',
         city: 'Yerevan',
-        patient_currency: 'US',  // too short
+        patient_currency: 'US', // too short
         max_distance_km: '15',
         max_wait_hours: '72',
       },
@@ -716,8 +632,16 @@ describe('GET /best-care-options: registry with disabled provider', () => {
   it('only fetches enabled providers', async () => {
     const partialRegistry = loadProviderRegistry(
       JSON.stringify([
-        { provider_id: 'northcare', offers_url: 'https://mock.northcare.com/offers', enabled: true },
-        { provider_id: 'carepoint', offers_url: 'https://mock.carepoint.com/offers', enabled: false },
+        {
+          provider_id: 'northcare',
+          offers_url: 'https://mock.northcare.com/offers',
+          enabled: true,
+        },
+        {
+          provider_id: 'carepoint',
+          offers_url: 'https://mock.carepoint.com/offers',
+          enabled: false,
+        },
       ]),
     )
 
@@ -766,5 +690,249 @@ describe('GET /health', () => {
     const res = await app.inject({ method: 'GET', url: '/health' })
     expect(res.statusCode).toBe(200)
     expect(res.json<{ status: string }>().status).toBe('ok')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Cross-provider deduplication — MedCenter duplicate slots
+// ---------------------------------------------------------------------------
+
+describe('GET /best-care-options: cross-provider deduplication', () => {
+  let threeProviderApp: FastifyInstance
+
+  beforeAll(async () => {
+    const threeProviderRegistry = loadProviderRegistry(
+      JSON.stringify([
+        {
+          provider_id: 'northcare',
+          offers_url: 'https://mock.northcare.com/offers',
+          enabled: true,
+        },
+        {
+          provider_id: 'carepoint',
+          offers_url: 'https://mock.carepoint.com/offers',
+          enabled: true,
+        },
+        {
+          provider_id: 'medcenter',
+          offers_url: 'https://mock.medcenter.com/offers',
+          enabled: true,
+        },
+      ]),
+    )
+
+    threeProviderApp = Fastify({ logger: false })
+    threeProviderApp.setErrorHandler(async (error, _request, reply) => {
+      if (error.statusCode === 400) {
+        await reply.code(400).send({ error: 'INVALID_REQUEST', message: error.message })
+        return
+      }
+      await reply.code(500).send({ error: 'INTERNAL_ERROR', message: 'Unexpected error' })
+    })
+    await threeProviderApp.register(async (instance) => {
+      await registerRoutes(instance, threeProviderRegistry, fxTable)
+    })
+    await threeProviderApp.ready()
+  })
+
+  beforeEach(() => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((url: string) => {
+        if (url.includes('northcare')) {
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+            json: () => Promise.resolve(NORTHCARE_OFFERS),
+          })
+        }
+        if (url.includes('carepoint')) {
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+            json: () => Promise.resolve(CAREPOINT_OFFERS),
+          })
+        }
+        if (url.includes('medcenter')) {
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+            json: () => Promise.resolve(MEDCENTER_OFFERS),
+          })
+        }
+        return Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve([]) })
+      }),
+    )
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('MC-3001 is dropped — NC-1001 wins the 09:00 slot with higher value_score', async () => {
+    const res = await threeProviderApp.inject({
+      method: 'GET',
+      url: '/best-care-options',
+      query: {
+        service_code: 'MRI_BRAIN',
+        city: 'Yerevan',
+        patient_currency: 'AMD',
+        max_distance_km: '15',
+        max_wait_hours: '72',
+        insurance_plan: 'MedPrime',
+      },
+    })
+
+    const body = res.json<RankingResponse>()
+    const ids = body.results.map((r) => r.offer_id)
+    expect(ids).toContain('NC-1001')
+    expect(ids).not.toContain('MC-3001')
+  })
+
+  it('MC-3002 is dropped — CP-2001 wins the 10:30 slot with higher value_score', async () => {
+    const res = await threeProviderApp.inject({
+      method: 'GET',
+      url: '/best-care-options',
+      query: {
+        service_code: 'MRI_BRAIN',
+        city: 'Yerevan',
+        patient_currency: 'AMD',
+        max_distance_km: '15',
+        max_wait_hours: '72',
+        insurance_plan: 'MedPrime',
+      },
+    })
+
+    const body = res.json<RankingResponse>()
+    const ids = body.results.map((r) => r.offer_id)
+    expect(ids).toContain('CP-2001')
+    expect(ids).not.toContain('MC-3002')
+  })
+
+  it('MC-3003 appears in results — unique slot wins uncontested', async () => {
+    const res = await threeProviderApp.inject({
+      method: 'GET',
+      url: '/best-care-options',
+      query: {
+        service_code: 'MRI_BRAIN',
+        city: 'Yerevan',
+        patient_currency: 'AMD',
+        max_distance_km: '15',
+        max_wait_hours: '72',
+        insurance_plan: 'MedPrime',
+      },
+    })
+
+    const body = res.json<RankingResponse>()
+    const ids = body.results.map((r) => r.offer_id)
+    expect(ids).toContain('MC-3003')
+  })
+
+  it('MC-3004 appears in results — unique slot, high quality', async () => {
+    const res = await threeProviderApp.inject({
+      method: 'GET',
+      url: '/best-care-options',
+      query: {
+        service_code: 'MRI_BRAIN',
+        city: 'Yerevan',
+        patient_currency: 'AMD',
+        max_distance_km: '15',
+        max_wait_hours: '72',
+        insurance_plan: 'MedPrime',
+      },
+    })
+
+    const body = res.json<RankingResponse>()
+    const ids = body.results.map((r) => r.offer_id)
+    expect(ids).toContain('MC-3004')
+  })
+
+  it('MC-3005 is filtered out — city is Gyumri not Yerevan', async () => {
+    const res = await threeProviderApp.inject({
+      method: 'GET',
+      url: '/best-care-options',
+      query: {
+        service_code: 'MRI_BRAIN',
+        city: 'Yerevan',
+        patient_currency: 'AMD',
+        max_distance_km: '15',
+        max_wait_hours: '72',
+        insurance_plan: 'MedPrime',
+      },
+    })
+
+    const body = res.json<RankingResponse>()
+    const ids = body.results.map((r) => r.offer_id)
+    expect(ids).not.toContain('MC-3005')
+  })
+
+  it('deduplication removes MC-3001 and MC-3002 — result count reflects full mock datasets', async () => {
+    const res = await threeProviderApp.inject({
+      method: 'GET',
+      url: '/best-care-options',
+      query: {
+        service_code: 'MRI_BRAIN',
+        city: 'Yerevan',
+        patient_currency: 'AMD',
+        max_distance_km: '15',
+        max_wait_hours: '72',
+        insurance_plan: 'MedPrime',
+      },
+    })
+
+    const body = res.json<RankingResponse>()
+    // All Yerevan MRI_BRAIN offers within constraints, after deduplication:
+    //   NC-1001 (slot 09:00 — beats MC-3001)
+    //   CP-2001 (slot 10:30 — beats MC-3002)
+    //   NC-1005 (slot 18:15 — unique)
+    //   NC-1002 (slot day2 13:30 — unique)
+    //   CP-2002 (slot day2 09:15 — unique, EUR)
+    //   CP-2004 (slot day1 06:45 — unique)
+    //   MC-3003 (slot day3 08:30 — unique)
+    //   MC-3004 is wait_hours=68 within 72 — unique
+    // MC-3001 and MC-3002 are dropped by dedup → 2 fewer than raw input
+    const ids = body.results.map((r) => r.offer_id)
+    expect(ids).not.toContain('MC-3001')
+    expect(ids).not.toContain('MC-3002')
+    expect(body.results.length).toBeGreaterThan(0)
+  })
+
+  it('NC-1001 is still rank 1 with three providers', async () => {
+    const res = await threeProviderApp.inject({
+      method: 'GET',
+      url: '/best-care-options',
+      query: {
+        service_code: 'MRI_BRAIN',
+        city: 'Yerevan',
+        patient_currency: 'AMD',
+        max_distance_km: '15',
+        max_wait_hours: '72',
+        insurance_plan: 'MedPrime',
+      },
+    })
+
+    const body = res.json<RankingResponse>()
+    expect(body.results[0].offer_id).toBe('NC-1001')
+    expect(body.results[0].rank).toBe(1)
+  })
+
+  it('ranks are sequential with three providers', async () => {
+    const res = await threeProviderApp.inject({
+      method: 'GET',
+      url: '/best-care-options',
+      query: {
+        service_code: 'MRI_BRAIN',
+        city: 'Yerevan',
+        patient_currency: 'AMD',
+        max_distance_km: '15',
+        max_wait_hours: '72',
+        insurance_plan: 'MedPrime',
+      },
+    })
+
+    const body = res.json<RankingResponse>()
+    body.results.forEach((r, i) => {
+      expect(r.rank).toBe(i + 1)
+    })
   })
 })

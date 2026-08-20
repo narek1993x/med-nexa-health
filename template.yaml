@@ -180,6 +180,39 @@ Resources:
           - 'node:*'
           - '@aws-sdk/*'
 
+  # -------------------------------------------------------------------------
+  # MedCenter mock provider Lambda
+  # -------------------------------------------------------------------------
+  MedCenterMockFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'med-nexa-mock-medcenter-${Environment}'
+      Description: Mock MedCenter provider — includes duplicate slots for deduplication testing
+      Handler: medcenter.handler
+      CodeUri: .
+      Events:
+        GetMedCenterOffers:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref MedNexaApi
+            Path: /provider/medcenter/offers
+            Method: GET
+      Tags:
+        Project: med-nexa-health
+        Environment: !Ref Environment
+        Role: mock-provider
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: false
+        Target: es2022
+        Format: cjs
+        EntryPoints:
+          - src/mocks/medcenter.ts
+        External:
+          - 'node:*'
+          - '@aws-sdk/*'
+
 # ---------------------------------------------------------------------------
 # Outputs
 # ---------------------------------------------------------------------------
@@ -196,12 +229,6 @@ Outputs:
     Export:
       Name: !Sub '${AWS::StackName}-BestCareOptionsUrl'
 
-  RankingFunctionArn:
-    Description: ARN of the Ranking Lambda function
-    Value: !GetAtt RankingFunction.Arn
-    Export:
-      Name: !Sub '${AWS::StackName}-RankingFunctionArn'
-
   NorthcareMockUrl:
     Description: URL of the NorthCare mock provider endpoint
     Value: !Sub 'https://${MedNexaApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/provider/northcare/offers'
@@ -213,3 +240,9 @@ Outputs:
     Value: !Sub 'https://${MedNexaApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/provider/carepoint/offers'
     Export:
       Name: !Sub '${AWS::StackName}-CarePointMockUrl'
+
+  MedCenterMockUrl:
+    Description: URL of the MedCenter mock provider endpoint
+    Value: !Sub 'https://${MedNexaApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/provider/medcenter/offers'
+    Export:
+      Name: !Sub '${AWS::StackName}-MedCenterMockUrl'

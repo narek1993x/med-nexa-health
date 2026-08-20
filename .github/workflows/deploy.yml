@@ -183,9 +183,16 @@ jobs:
             --query "Stacks[0].Outputs[?OutputKey=='CarePointMockUrl'].OutputValue" \
             --output text)
 
+          MEDCENTER_URL=$(aws cloudformation describe-stacks \
+            --stack-name "$STACK_NAME" \
+            --region "$REGION" \
+            --query "Stacks[0].Outputs[?OutputKey=='MedCenterMockUrl'].OutputValue" \
+            --output text)
+
           echo "api_url=$API_URL" >> "$GITHUB_OUTPUT"
           echo "northcare_url=$NORTHCARE_URL" >> "$GITHUB_OUTPUT"
           echo "carepoint_url=$CAREPOINT_URL" >> "$GITHUB_OUTPUT"
+          echo "medcenter_url=$MEDCENTER_URL" >> "$GITHUB_OUTPUT"
 
       - name: Print deployed endpoint URLs
         run: |
@@ -196,6 +203,7 @@ jobs:
           echo "| GET /best-care-options | ${{ steps.stack-outputs.outputs.api_url }} |" >> "$GITHUB_STEP_SUMMARY"
           echo "| NorthCare mock | ${{ steps.stack-outputs.outputs.northcare_url }} |" >> "$GITHUB_STEP_SUMMARY"
           echo "| CarePoint mock | ${{ steps.stack-outputs.outputs.carepoint_url }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| MedCenter mock | ${{ steps.stack-outputs.outputs.medcenter_url }} |" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "### Example request" >> "$GITHUB_STEP_SUMMARY"
           echo '```bash' >> "$GITHUB_STEP_SUMMARY"
