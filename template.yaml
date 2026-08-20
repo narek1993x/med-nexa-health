@@ -47,7 +47,7 @@ Parameters:
 
   FxRates:
     Type: String
-    Default: '{"AMD":{"USD":0.00261,"AMD":1},"USD":{"AMD":383.14,"USD":1}}'
+    Default: '{"AMD":{"USD":0.00261,"AMD":1,"EUR":0.00238},"USD":{"AMD":383.14,"USD":1,"EUR":0.00912},"EUR":{"AMD":420.0,"USD":1.0965,"EUR":1}}'
     Description: >
       JSON FX rate table for currency conversion.
       Format: {"FROM":{"TO":rate}}
