@@ -1,34 +1,28 @@
 /**
  * Stage prefix stripping for AWS HTTP API (v2).
  *
- * API Gateway HTTP API includes the stage name in rawPath:
- *   /dev/best-care-options → /best-care-options
- *
- * @fastify/aws-lambda's retainStage logic only handles REST API (v1) events.
- * onRequest hooks are also too late — Fastify's router has already matched
- * (or failed to match) the path by then.
- *
- * The correct fix is to mutate the event before passing it to the proxy,
- * stripping the stage segment from rawPath and requestContext.http.path.
- *
- * Usage:
- *   return proxy(stripStageFromEvent(event), context)
- *
- * Reads STAGE env var set by SAM from the Environment CloudFormation parameter.
- * No-ops when STAGE is unset (local dev / unit tests).
+ * API Gateway includes the stage name in rawPath (e.g. /dev/best-care-options).
+ * Both functions read the STAGE env var set by SAM and no-op when it is unset.
  */
 
 import type { APIGatewayProxyEventV2 } from 'aws-lambda'
 
-export function stripStageFromEvent(event: APIGatewayProxyEventV2): APIGatewayProxyEventV2 {
+/** Returns rawPath with the stage prefix removed, or rawPath as-is if absent. */
+export function resolveEventPath(event: APIGatewayProxyEventV2): string {
+  const raw = event.rawPath ?? '/'
   const stage = process.env['STAGE']
-  if (!stage) return event
+  if (!stage) return raw
 
   const prefix = `/${stage}`
-  const rawPath = event.rawPath ?? ''
-  if (!rawPath.startsWith(`${prefix}/`) && rawPath !== prefix) return event
+  if (raw.startsWith(`${prefix}/`)) return raw.slice(prefix.length)
+  if (raw === prefix) return '/'
+  return raw
+}
 
-  const strippedPath = rawPath.slice(prefix.length) || '/'
+/** Returns a shallow-cloned event with rawPath and requestContext.http.path rewritten. */
+export function stripStageFromEvent(event: APIGatewayProxyEventV2): APIGatewayProxyEventV2 {
+  const strippedPath = resolveEventPath(event)
+  if (strippedPath === (event.rawPath ?? '/')) return event
 
   return {
     ...event,

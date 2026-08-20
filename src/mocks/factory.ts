@@ -7,38 +7,44 @@
  *
  * Adding a new provider mock = ~5 lines + one SAM function entry.
  * The ranking service never changes.
+ *
+ * Implementation: plain Node.js — no framework dependency.
+ * Handles path matching (with optional stage prefix stripping), a /health
+ * route, and a 404 fallback. Uses only the AWS Lambda types package.
  */
 
-import awsLambdaFastify from '@fastify/aws-lambda'
-import Fastify from 'fastify'
 import type { APIGatewayProxyEventV2, Context } from 'aws-lambda'
 import type { Offer } from '../ranking/types'
-import { stripStageFromEvent } from '../plugins/stripStagePrefix'
+import { resolveEventPath } from '../plugins/stripStagePrefix'
+
+export interface LambdaResponse {
+  statusCode: number
+  headers: Record<string, string>
+  body: string
+}
+
+const JSON_HEADERS = { 'Content-Type': 'application/json' }
+
+function jsonResponse(statusCode: number, body: unknown): LambdaResponse {
+  return { statusCode, headers: JSON_HEADERS, body: JSON.stringify(body) }
+}
 
 export function createMockHandler(
   offers: Offer[],
   routePath = '/offers',
-): (event: APIGatewayProxyEventV2, context: Context) => Promise<unknown> {
-  const app = Fastify({
-    logger: {
-      level: process.env['LOG_LEVEL'] ?? 'info',
-    },
-  })
+): (event: APIGatewayProxyEventV2, context: Context) => Promise<LambdaResponse> {
+  return async (event: APIGatewayProxyEventV2, _context: Context): Promise<LambdaResponse> => {
+    const method = event.requestContext.http.method.toUpperCase()
+    const path = resolveEventPath(event)
 
-  // GET <routePath> — returns the static offer list for this provider
-  app.get(routePath, async (_request, reply) => {
-    await reply.code(200).send(offers)
-  })
+    if (method === 'GET' && path === routePath) {
+      return jsonResponse(200, offers)
+    }
 
-  // Health check — useful for SAM local and ALB target group checks
-  app.get('/health', async (_request, reply) => {
-    await reply.code(200).send({ status: 'ok' })
-  })
+    if (method === 'GET' && path === '/health') {
+      return jsonResponse(200, { status: 'ok' })
+    }
 
-  const proxy = awsLambdaFastify(app)
-
-  return async (event: APIGatewayProxyEventV2, context: Context) => {
-    await app.ready()
-    return proxy(stripStageFromEvent(event), context)
+    return jsonResponse(404, { message: `Route not found: ${method} ${path}` })
   }
 }
