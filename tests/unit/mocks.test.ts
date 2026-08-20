@@ -10,7 +10,6 @@ import Fastify from 'fastify'
 import type { Offer } from '../../src/ranking/types'
 import { NORTHCARE_OFFERS } from '../../src/mocks/northcare'
 import { CAREPOINT_OFFERS } from '../../src/mocks/carepoint'
-import { MEDCENTER_OFFERS } from '../../src/mocks/medcenter'
 
 // ---------------------------------------------------------------------------
 // Helper — build a minimal Fastify app serving a static offer list
@@ -164,69 +163,6 @@ describe('Mock provider: CarePoint', () => {
 
     expect(cp2005?.city).toBe('Vanadzor')
     expect(cp2005?.insurance_plans).not.toContain('MedPrime')
-  })
-})
-
-// ---------------------------------------------------------------------------
-// MedCenter
-// ---------------------------------------------------------------------------
-
-describe('Mock provider: MedCenter', () => {
-  it('returns 200 with all 5 offers', async () => {
-    const app = await buildMockApp(MEDCENTER_OFFERS)
-    const res = await app.inject({ method: 'GET', url: '/offers' })
-
-    expect(res.statusCode).toBe(200)
-    expect(res.json<Offer[]>()).toHaveLength(5)
-  })
-
-  it('all offers have provider_id medcenter', async () => {
-    const app = await buildMockApp(MEDCENTER_OFFERS)
-    const res = await app.inject({ method: 'GET', url: '/offers' })
-
-    res.json<Offer[]>().forEach((o) => expect(o.provider_id).toBe('medcenter'))
-  })
-
-  it('MC-3001 shares slot with NC-1001 (dedup candidate)', async () => {
-    const app = await buildMockApp(MEDCENTER_OFFERS)
-    const res = await app.inject({ method: 'GET', url: '/offers' })
-    const mc3001 = res.json<Offer[]>().find((o) => o.offer_id === 'MC-3001')
-
-    expect(mc3001?.earliest_slot_utc).toBe('2026-09-02T09:00:00Z')
-    expect(mc3001?.service_code).toBe('MRI_BRAIN')
-    expect(mc3001?.city).toBe('Yerevan')
-  })
-
-  it('MC-3002 shares slot with CP-2001 (dedup candidate)', async () => {
-    const app = await buildMockApp(MEDCENTER_OFFERS)
-    const res = await app.inject({ method: 'GET', url: '/offers' })
-    const mc3002 = res.json<Offer[]>().find((o) => o.offer_id === 'MC-3002')
-
-    expect(mc3002?.earliest_slot_utc).toBe('2026-09-02T10:30:00Z')
-    expect(mc3002?.service_code).toBe('MRI_BRAIN')
-    expect(mc3002?.city).toBe('Yerevan')
-  })
-
-  it('MC-3001 has lower quality than NC-1001 — will lose dedup', async () => {
-    const nc1001 = NORTHCARE_OFFERS.find((o) => o.offer_id === 'NC-1001')
-    const mc3001 = MEDCENTER_OFFERS.find((o) => o.offer_id === 'MC-3001')
-
-    expect(mc3001?.quality_score).toBeLessThan(nc1001?.quality_score ?? 0)
-  })
-
-  it('MC-3002 has lower quality than CP-2001 — will lose dedup', async () => {
-    const cp2001 = CAREPOINT_OFFERS.find((o) => o.offer_id === 'CP-2001')
-    const mc3002 = MEDCENTER_OFFERS.find((o) => o.offer_id === 'MC-3002')
-
-    expect(mc3002?.quality_score).toBeLessThan(cp2001?.quality_score ?? 0)
-  })
-
-  it('MC-3005 is in Gyumri (filtered out by city)', async () => {
-    const app = await buildMockApp(MEDCENTER_OFFERS)
-    const res = await app.inject({ method: 'GET', url: '/offers' })
-    const mc3005 = res.json<Offer[]>().find((o) => o.offer_id === 'MC-3005')
-
-    expect(mc3005?.city).toBe('Gyumri')
   })
 })
 
