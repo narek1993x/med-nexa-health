@@ -81,8 +81,8 @@ med-nexa-health/
 ├── src/
 │   ├── ranking/
 │   │   ├── handler.ts          # Lambda entrypoint — promise-based init, no top-level await
-│   │   ├── router.ts           # GET /best-care-options route + full pipeline
-│   │   ├── types.ts            # Shared TypeScript interfaces
+│   │   ├── router.ts           # GET /best-care-options + GET /config/options routes
+│   │   ├── types.ts            # Shared TypeScript interfaces (incl. ConfigOptions)
 │   │   └── service/
 │   │       ├── registry.ts     # PROVIDER_REGISTRY env var parser
 │   │       ├── aggregator.ts   # Parallel provider fetch (5 s timeout)
@@ -90,7 +90,8 @@ med-nexa-health/
 │   │       ├── filter.ts       # Service/city + distance/wait filters
 │   │       ├── scorer.ts       # value_score formula
 │   │       ├── deduplicator.ts # Slot-level deduplication
-│   │       └── ranker.ts       # Sort + rank + reason generation
+│   │       ├── ranker.ts       # Sort + rank + reason generation
+│   │       └── config.ts       # deriveConfigOptions — extracts unique filter values
 │   ├── mocks/
 │   │   ├── factory.ts          # Shared mock handler factory
 │   │   ├── northcare.ts        # NorthCare mock Lambda (NC-1001, NC-1005)
@@ -405,6 +406,39 @@ Concurrency is serialised on `main` to prevent racing deploys.
 ---
 
 ## API reference
+
+### `GET /config/options`
+
+Returns unique, sorted filter option values derived dynamically from all enabled providers' offers. Used by the [MedNexa UI](../med-nexa-ui) to populate dropdown menus.
+
+**No query parameters.**
+
+**Example request:**
+
+```bash
+curl -s "https://<api-id>.execute-api.eu-west-1.amazonaws.com/dev/config/options" | jq .
+```
+
+**Example response:**
+
+```json
+{
+  "service_codes": ["CT_CHEST", "MRI_BRAIN"],
+  "cities": ["Gyumri", "Vanadzor", "Yerevan"],
+  "currencies": ["AMD", "EUR", "USD"],
+  "insurance_plans": ["CarePlus", "MedPrime", "SilverShield"]
+}
+```
+
+All arrays are alphabetically sorted and deduplicated. Values are derived from the live offer data — adding a new provider automatically adds its service codes, cities, currencies, and insurance plans to the response.
+
+If all providers are unavailable, all arrays are empty:
+
+```json
+{ "service_codes": [], "cities": [], "currencies": [], "insurance_plans": [] }
+```
+
+---
 
 ### `GET /best-care-options`
 

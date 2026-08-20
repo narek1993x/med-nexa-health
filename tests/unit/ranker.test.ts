@@ -101,41 +101,41 @@ const NC1005: ScoredOffer = {
 
 describe('rankOffers: sort order', () => {
   it('returns empty array for empty input', () => {
-    expect(rankOffers([])).toHaveLength(0)
+    expect(rankOffers([], 'AMD')).toHaveLength(0)
   })
 
   it('returns single offer with rank 1', () => {
-    const result = rankOffers([NC1001])
+    const result = rankOffers([NC1001], 'AMD')
     expect(result).toHaveLength(1)
     expect(result[0].rank).toBe(1)
   })
 
   it('spec sample data: NC-1001 ranks 1st', () => {
-    const result = rankOffers([NC1005, CP2001, NC1001])
+    const result = rankOffers([NC1005, CP2001, NC1001], 'AMD')
     expect(result[0].offer_id).toBe('NC-1001')
     expect(result[0].rank).toBe(1)
   })
 
   it('spec sample data: CP-2001 ranks 2nd', () => {
-    const result = rankOffers([NC1005, CP2001, NC1001])
+    const result = rankOffers([NC1005, CP2001, NC1001], 'AMD')
     expect(result[1].offer_id).toBe('CP-2001')
     expect(result[1].rank).toBe(2)
   })
 
   it('spec sample data: NC-1005 ranks 3rd (last)', () => {
-    const result = rankOffers([NC1005, CP2001, NC1001])
+    const result = rankOffers([NC1005, CP2001, NC1001], 'AMD')
     expect(result[2].offer_id).toBe('NC-1005')
     expect(result[2].rank).toBe(3)
   })
 
   it('rank is always sequential starting at 1', () => {
-    const result = rankOffers([NC1005, CP2001, NC1001])
+    const result = rankOffers([NC1005, CP2001, NC1001], 'AMD')
     result.forEach((r, i) => expect(r.rank).toBe(i + 1))
   })
 
   it('input order does not affect output rank (deterministic)', () => {
-    const order1 = rankOffers([NC1001, CP2001, NC1005])
-    const order2 = rankOffers([NC1005, NC1001, CP2001])
+    const order1 = rankOffers([NC1001, CP2001, NC1005], 'AMD')
+    const order2 = rankOffers([NC1005, NC1001, CP2001], 'AMD')
     expect(order1.map((r) => r.offer_id)).toEqual(order2.map((r) => r.offer_id))
   })
 
@@ -145,7 +145,7 @@ describe('rankOffers: sort order', () => {
     // Same value_score — cheaper wins
     expensive.value_score = NC1001.value_score
     cheap.value_score = NC1001.value_score
-    const result = rankOffers([expensive, cheap])
+    const result = rankOffers([expensive, cheap], 'AMD')
     expect(result[0].offer_id).toBe('CHE')
   })
 })
@@ -156,7 +156,7 @@ describe('rankOffers: sort order', () => {
 
 describe('rankOffers: output shape', () => {
   it('output includes all required fields', () => {
-    const result = rankOffers([NC1001])
+    const result = rankOffers([NC1001], 'AMD')
     const offer = result[0]
     expect(offer).toHaveProperty('rank')
     expect(offer).toHaveProperty('offer_id')
@@ -171,13 +171,13 @@ describe('rankOffers: output shape', () => {
   })
 
   it('value_score is rounded to 3 decimal places', () => {
-    const result = rankOffers([NC1001])
+    const result = rankOffers([NC1001], 'AMD')
     const decimals = result[0].value_score.toString().split('.')[1]?.length ?? 0
     expect(decimals).toBeLessThanOrEqual(3)
   })
 
   it('effective_price is rounded to 2 decimal places', () => {
-    const result = rankOffers([NC1001])
+    const result = rankOffers([NC1001], 'AMD')
     const decimals = result[0].effective_price.toString().split('.')[1]?.length ?? 0
     expect(decimals).toBeLessThanOrEqual(2)
   })
@@ -185,7 +185,7 @@ describe('rankOffers: output shape', () => {
   it('does not mutate the input array', () => {
     const input = [NC1005, NC1001, CP2001]
     const originalOrder = input.map((o) => o.offer_id)
-    rankOffers(input)
+    rankOffers(input, 'AMD')
     expect(input.map((o) => o.offer_id)).toEqual(originalOrder)
   })
 })
@@ -204,7 +204,7 @@ describe('buildReason', () => {
       'CLOSEST_DISTANCE',
     ]
     ;[NC1001, CP2001, NC1005].forEach((offer) => {
-      const { reason_code } = buildReason(offer)
+      const { reason_code } = buildReason(offer, 'AMD')
       expect(allowed).toContain(reason_code)
     })
   })
@@ -212,28 +212,28 @@ describe('buildReason', () => {
   it('reason string is non-empty', () => {
     const offers = [NC1001, CP2001, NC1005]
     offers.forEach((offer) => {
-      const { reason } = buildReason(offer)
+      const { reason } = buildReason(offer, 'AMD')
       expect(reason.length).toBeGreaterThan(0)
     })
   })
 
   it('reason mentions insurance discount when applied', () => {
-    const { reason } = buildReason(NC1001) // insurance_applied: true
+    const { reason } = buildReason(NC1001, 'AMD') // insurance_applied: true
     expect(reason).toContain('insurance')
   })
 
   it('reason does not mention insurance when not applied', () => {
-    const { reason } = buildReason(NC1005) // insurance_applied: false
+    const { reason } = buildReason(NC1005, 'AMD') // insurance_applied: false
     expect(reason).not.toContain('insurance')
   })
 
   it('reason includes quality score', () => {
-    const { reason } = buildReason(NC1001)
+    const { reason } = buildReason(NC1001, 'AMD')
     expect(reason).toContain('88')
   })
 
   it('reason_code is a string', () => {
-    const { reason_code } = buildReason(NC1001)
+    const { reason_code } = buildReason(NC1001, 'AMD')
     expect(typeof reason_code).toBe('string')
   })
 
@@ -248,11 +248,11 @@ describe('buildReason', () => {
       value_score: 30,
       insurance_applied: false,
     }
-    const { reason_code } = buildReason(cheapOffer)
+    const { reason_code } = buildReason(cheapOffer, 'AMD')
     expect(reason_code).toBe('BEST_PRICE')
   })
 
-  it('BEST_PRICE reason includes effective_price', () => {
+  it('BEST_PRICE reason includes effective_price and patient_currency', () => {
     const cheapOffer: ScoredOffer = {
       ...NC1001,
       effective_price: 5000,
@@ -263,8 +263,9 @@ describe('buildReason', () => {
       value_score: 30,
       insurance_applied: false,
     }
-    const { reason } = buildReason(cheapOffer)
+    const { reason } = buildReason(cheapOffer, 'AMD')
     expect(reason).toContain('5000')
+    expect(reason).toContain('AMD')
   })
 
   it('returns SHORTEST_WAIT when wait contribution dominates', () => {
@@ -279,7 +280,7 @@ describe('buildReason', () => {
       value_score: 25 - 100, // wait dominates positive side
       insurance_applied: false,
     }
-    const { reason_code } = buildReason(waitOffer)
+    const { reason_code } = buildReason(waitOffer, 'AMD')
     expect(reason_code).toBe('SHORTEST_WAIT')
   })
 
@@ -295,7 +296,7 @@ describe('buildReason', () => {
       value_score: 15 - 100,
       insurance_applied: false,
     }
-    const { reason_code } = buildReason(distOffer)
+    const { reason_code } = buildReason(distOffer, 'AMD')
     expect(reason_code).toBe('CLOSEST_DISTANCE')
   })
 
@@ -311,7 +312,7 @@ describe('buildReason', () => {
       value_score: 50 - 100,
       insurance_applied: false,
     }
-    const { reason_code } = buildReason(qualOffer)
+    const { reason_code } = buildReason(qualOffer, 'AMD')
     expect(reason_code).toBe('BEST_QUALITY')
   })
 })

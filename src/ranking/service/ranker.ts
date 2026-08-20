@@ -28,7 +28,10 @@ import type { ScoredOffer, RankedOffer, ReasonCode } from '../types'
  *
  * We compare the actual point contributions to determine dominance.
  */
-export function buildReason(offer: ScoredOffer): { reason_code: ReasonCode; reason: string } {
+export function buildReason(
+  offer: ScoredOffer,
+  patientCurrency: string,
+): { reason_code: ReasonCode; reason: string } {
   const qualityContrib = offer.quality_score * 0.5
   const waitContrib = offer.wait_score * 25
   const distContrib = offer.distance_score * 15
@@ -53,7 +56,8 @@ export function buildReason(offer: ScoredOffer): { reason_code: ReasonCode; reas
   if (isPriceDominant) {
     return {
       reason_code: 'BEST_PRICE',
-      reason: `Best price: ${offer.effective_price.toFixed(0)} ${offer.currency}` +
+      reason:
+        `Best price: ${offer.effective_price.toFixed(0)} ${patientCurrency}` +
         ` with quality ${offer.quality_score}${discountNote}`,
     }
   }
@@ -66,7 +70,8 @@ export function buildReason(offer: ScoredOffer): { reason_code: ReasonCode; reas
   if (isBalanced && offer.value_score > 40) {
     return {
       reason_code: 'TOP_VALUE_SCORE',
-      reason: `Best overall value: quality ${offer.quality_score}` +
+      reason:
+        `Best overall value: quality ${offer.quality_score}` +
         `, wait ${offer.wait_hours} h` +
         `, distance ${offer.distance_km} km` +
         discountNote,
@@ -77,28 +82,32 @@ export function buildReason(offer: ScoredOffer): { reason_code: ReasonCode; reas
     case 'BEST_QUALITY':
       return {
         reason_code: 'BEST_QUALITY',
-        reason: `High quality score: ${offer.quality_score}` +
+        reason:
+          `High quality score: ${offer.quality_score}` +
           ` with wait ${offer.wait_hours} h and distance ${offer.distance_km} km` +
           discountNote,
       }
     case 'SHORTEST_WAIT':
       return {
         reason_code: 'SHORTEST_WAIT',
-        reason: `Shortest wait time: ${offer.wait_hours} h` +
+        reason:
+          `Shortest wait time: ${offer.wait_hours} h` +
           ` with quality ${offer.quality_score}` +
           discountNote,
       }
     case 'CLOSEST_DISTANCE':
       return {
         reason_code: 'CLOSEST_DISTANCE',
-        reason: `Closest location: ${offer.distance_km} km` +
+        reason:
+          `Closest location: ${offer.distance_km} km` +
           ` with quality ${offer.quality_score}` +
           discountNote,
       }
     default:
       return {
         reason_code: 'TOP_VALUE_SCORE',
-        reason: `Strong overall value: quality ${offer.quality_score}` +
+        reason:
+          `Strong overall value: quality ${offer.quality_score}` +
           `, wait ${offer.wait_hours} h` +
           discountNote,
       }
@@ -119,18 +128,18 @@ export function buildReason(offer: ScoredOffer): { reason_code: ReasonCode; reas
  * @param dedupedOffers - Scored + deduplicated offers
  * @returns Ranked offers with rank, reason_code, and reason assigned
  */
-export function rankOffers(dedupedOffers: ScoredOffer[]): RankedOffer[] {
+export function rankOffers(dedupedOffers: ScoredOffer[], patientCurrency: string): RankedOffer[] {
   if (dedupedOffers.length === 0) return []
 
   const sorted = [...dedupedOffers].sort((a, b) => {
     if (b.value_score !== a.value_score) {
-      return b.value_score - a.value_score        // desc
+      return b.value_score - a.value_score // desc
     }
-    return a.effective_price - b.effective_price  // asc on tie
+    return a.effective_price - b.effective_price // asc on tie
   })
 
   return sorted.map((offer, index) => {
-    const { reason_code, reason } = buildReason(offer)
+    const { reason_code, reason } = buildReason(offer, patientCurrency)
     return {
       rank: index + 1,
       offer_id: offer.offer_id,

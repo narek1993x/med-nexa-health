@@ -103,3 +103,14 @@ export interface RankingResponse {
 // ---------------------------------------------------------------------------
 
 export type FxTable = Record<string, Record<string, number>>
+
+// ---------------------------------------------------------------------------
+// Config options response shape for GET /config/options
+// ---------------------------------------------------------------------------
+
+export interface ConfigOptions {
+  service_codes: string[] // unique service codes from all provider offers, sorted alphabetically
+  cities: string[] // unique cities from all provider offers, sorted alphabetically
+  currencies: string[] // unique currencies from all provider offers, sorted alphabetically
+  insurance_plans: string[] // union of all insurance_plans arrays across all offers, sorted alphabetically
+}

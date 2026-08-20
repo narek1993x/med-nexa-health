@@ -98,6 +98,12 @@ Resources:
             ApiId: !Ref MedNexaApi
             Path: /best-care-options
             Method: GET
+        GetConfigOptions:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref MedNexaApi
+            Path: /config/options
+            Method: GET
       Tags:
         Project: med-nexa-health
         Environment: !Ref Environment

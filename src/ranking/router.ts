@@ -15,11 +15,36 @@ import { randomUUID } from 'crypto'
 import { aggregateOffers } from './service/aggregator'
 import { filterByServiceAndCity, filterByConstraints } from './service/filter'
 import { convertPrice } from './service/fx'
-import { computeEffectivePrice, computeWaitScore, computeDistanceScore, computeValueScore } from './service/scorer'
+import {
+  computeEffectivePrice,
+  computeWaitScore,
+  computeDistanceScore,
+  computeValueScore,
+} from './service/scorer'
 import { deduplicateBySlot } from './service/deduplicator'
 import { rankOffers } from './service/ranker'
 
-import type { ProviderConfig, FxTable, ScoredOffer, RankingResponse } from './types'
+import { deriveConfigOptions } from './service/config'
+import type { ProviderConfig, FxTable, ScoredOffer, RankingResponse, ConfigOptions } from './types'
+
+// ---------------------------------------------------------------------------
+// Config options response schema
+// ---------------------------------------------------------------------------
+
+const configOptionsSchema = {
+  response: {
+    200: {
+      type: 'object',
+      required: ['service_codes', 'cities', 'currencies', 'insurance_plans'],
+      properties: {
+        service_codes: { type: 'array', items: { type: 'string' } },
+        cities: { type: 'array', items: { type: 'string' } },
+        currencies: { type: 'array', items: { type: 'string' } },
+        insurance_plans: { type: 'array', items: { type: 'string' } },
+      },
+    },
+  },
+} as const
 
 // ---------------------------------------------------------------------------
 // Query string schema (Fastify JSON Schema validation)
@@ -102,6 +127,28 @@ export async function registerRoutes(
     await reply.code(200).send({ status: 'ok', service: 'med-nexa-ranking' })
   })
 
+  // Config options — returns all unique filter values for UI dropdown population
+  app.get(
+    '/config/options',
+    { schema: configOptionsSchema },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const rawOffers = await aggregateOffers(registry, request.log)
+      const options: ConfigOptions = deriveConfigOptions(rawOffers)
+
+      request.log.info(
+        {
+          service_codes_count: options.service_codes.length,
+          cities_count: options.cities.length,
+          currencies_count: options.currencies.length,
+          insurance_plans_count: options.insurance_plans.length,
+        },
+        'Config options response dispatched',
+      )
+
+      await reply.code(200).send(options)
+    },
+  )
+
   // Main ranking endpoint
   app.get<{ Querystring: BestCareOptionsQuery }>(
     '/best-care-options',
@@ -143,7 +190,11 @@ export async function registerRoutes(
       // -----------------------------------------------------------------------
       // Step 3: Filter by distance + wait constraints
       // -----------------------------------------------------------------------
-      const constraintFiltered = filterByConstraints(serviceFiltered, max_distance_km, max_wait_hours)
+      const constraintFiltered = filterByConstraints(
+        serviceFiltered,
+        max_distance_km,
+        max_wait_hours,
+      )
 
       request.log.info(
         {
@@ -163,7 +214,12 @@ export async function registerRoutes(
       for (const offer of constraintFiltered) {
         let convertedPrice: number
         try {
-          convertedPrice = convertPrice(offer.price_amount, offer.currency, patient_currency, fxTable)
+          convertedPrice = convertPrice(
+            offer.price_amount,
+            offer.currency,
+            patient_currency,
+            fxTable,
+          )
         } catch {
           // Unknown currency pair — skip this offer rather than failing the request
           request.log.warn(
@@ -218,7 +274,7 @@ export async function registerRoutes(
       // -----------------------------------------------------------------------
       // Step 8: Rank and build response
       // -----------------------------------------------------------------------
-      const rankedOffers = rankOffers(dedupedOffers)
+      const rankedOffers = rankOffers(dedupedOffers, patient_currency)
 
       const response: RankingResponse = {
         request_id: requestId,
