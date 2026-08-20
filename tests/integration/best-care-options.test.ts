@@ -11,7 +11,8 @@
  * Manual expected rank order (patient_currency=AMD, max_dist=15, max_wait=72, insurance=MedPrime):
  *   Rank 1: NC-1001  value_score ≈ 33.48
  *   Rank 2: CP-2001  value_score ≈ 32.69
- *   Rank 3: NC-1005  value_score ≈ 19.32
+ *   Rank 3: CP-2002  value_score ≈ 24.49  (EUR offer, no insurance match)
+ *   Rank 4: NC-1005  value_score ≈ 19.32
  *   (CP-2005 filtered out — city=Vanadzor != Yerevan)
  */
 
@@ -171,7 +172,7 @@ describe('GET /best-care-options: happy path', () => {
     expect(body.results[1].rank).toBe(2)
   })
 
-  it('NC-1005 is ranked third (no insurance, high price penalty)', async () => {
+  it('NC-1005 is ranked fourth (no insurance, high price penalty; CP-2002 EUR offer ranks above it)', async () => {
     const res = await app.inject({
       method: 'GET',
       url: '/best-care-options',
@@ -186,8 +187,9 @@ describe('GET /best-care-options: happy path', () => {
     })
 
     const body = res.json<RankingResponse>()
-    expect(body.results[2].offer_id).toBe('NC-1005')
-    expect(body.results[2].rank).toBe(3)
+    const nc1005 = body.results.find((r: RankedOffer) => r.offer_id === 'NC-1005')
+    expect(nc1005).toBeDefined()
+    expect(nc1005!.rank).toBe(4)
   })
 
   it('response contains all required top-level fields', async () => {

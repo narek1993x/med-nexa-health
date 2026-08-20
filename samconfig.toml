@@ -27,7 +27,7 @@ parameter_overrides = [
   # Format: JSON array — adding a new provider = update this value, no code changes.
   "ProviderRegistry=[{\"provider_id\":\"northcare\",\"offers_url\":\"REPLACE_WITH_NORTHCARE_URL\",\"enabled\":true},{\"provider_id\":\"carepoint\",\"offers_url\":\"REPLACE_WITH_CAREPOINT_URL\",\"enabled\":true}]",
   # FX rates — override with current rates for production
-  "FxRates={\"AMD\":{\"USD\":0.00261,\"AMD\":1},\"USD\":{\"AMD\":383.14,\"USD\":1}}"
+  "FxRates={\"AMD\":{\"AMD\":1,\"USD\":0.00261,\"EUR\":0.00238},\"USD\":{\"USD\":1,\"AMD\":383.14,\"EUR\":0.9120},\"EUR\":{\"EUR\":1,\"AMD\":420.0,\"USD\":1.0965}}"
 ]
 tags = "Project=med-nexa-health Environment=dev"
 
@@ -44,7 +44,7 @@ parameter_overrides = [
   "Environment=staging",
   "LogLevel=info",
   "ProviderRegistry=[{\"provider_id\":\"northcare\",\"offers_url\":\"REPLACE_WITH_STAGING_NORTHCARE_URL\",\"enabled\":true},{\"provider_id\":\"carepoint\",\"offers_url\":\"REPLACE_WITH_STAGING_CAREPOINT_URL\",\"enabled\":true}]",
-  "FxRates={\"AMD\":{\"USD\":0.00261,\"AMD\":1},\"USD\":{\"AMD\":383.14,\"USD\":1}}"
+  "FxRates={\"AMD\":{\"AMD\":1,\"USD\":0.00261,\"EUR\":0.00238},\"USD\":{\"USD\":1,\"AMD\":383.14,\"EUR\":0.9120},\"EUR\":{\"EUR\":1,\"AMD\":420.0,\"USD\":1.0965}}"
 ]
 tags = "Project=med-nexa-health Environment=staging"
 

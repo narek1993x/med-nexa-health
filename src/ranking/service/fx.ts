@@ -29,8 +29,9 @@ export class FxConversionError extends Error {
 // ---------------------------------------------------------------------------
 
 const DEFAULT_FX_TABLE: FxTable = {
-  AMD: { AMD: 1, USD: 0.00261 },
-  USD: { USD: 1, AMD: 383.14 },
+  AMD: { AMD: 1, USD: 0.00261, EUR: 0.00238 },
+  USD: { USD: 1, AMD: 383.14, EUR: 0.912 },
+  EUR: { EUR: 1, AMD: 420.0, USD: 1.0965 },
 }
 
 // ---------------------------------------------------------------------------
